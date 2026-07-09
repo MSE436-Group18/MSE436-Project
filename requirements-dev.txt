@@ -1,0 +1,5 @@
+-r requirements.txt
+mypy==1.16.1
+pandas-stubs==2.3.0.250703
+pytest==8.4.1
+ruff==0.12.4
