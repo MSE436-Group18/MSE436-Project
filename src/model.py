@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Literal
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.impute import SimpleImputer
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
@@ -144,3 +147,109 @@ def _make_preprocessor() -> ColumnTransformer:
         ],
         verbose_feature_names_out=True,
     )
+
+
+def _make_regressor(loss: str, *, alpha: float = 0.9) -> GradientBoostingRegressor:
+    return GradientBoostingRegressor(
+        loss=loss,
+        alpha=alpha,
+        n_estimators=300,
+        learning_rate=0.04,
+        max_depth=3,
+        min_samples_leaf=8,
+        random_state=436,
+    )
+
+
+def train_valuation_model(
+    raw_data: pd.DataFrame,
+) -> tuple[ValuationModelBundle, dict[str, Any]]:
+    data = prepare_training_data(raw_data)
+    test_year = int(data["sale_year"].max())
+    train_data = data[data["sale_year"] < test_year]
+    test_data = data[data["sale_year"] == test_year]
+    if train_data.empty or test_data.empty:
+        raise ValueError("A time-based train/test split could not be created.")
+
+    preprocessor = _make_preprocessor()
+    x_train = preprocessor.fit_transform(train_data[MODEL_FEATURES])
+    x_test = preprocessor.transform(test_data[MODEL_FEATURES])
+    y_train = train_data["sale_price"].to_numpy(dtype=float)
+    y_test = test_data["sale_price"].to_numpy(dtype=float)
+    log_y_train = np.log1p(y_train)
+
+    point_model = _make_regressor("huber")
+    lower_model = _make_regressor("quantile", alpha=0.10)
+    upper_model = _make_regressor("quantile", alpha=0.90)
+    point_model.fit(x_train, log_y_train)
+    lower_model.fit(x_train, log_y_train)
+    upper_model.fit(x_train, log_y_train)
+
+    point_predictions = np.expm1(point_model.predict(x_test))
+    lower_predictions = np.expm1(lower_model.predict(x_test))
+    upper_predictions = np.expm1(upper_model.predict(x_test))
+    ordered_lower = np.minimum(lower_predictions, point_predictions)
+    ordered_upper = np.maximum(upper_predictions, point_predictions)
+
+    baseline_prediction = np.full_like(y_test, np.median(y_train))
+    feature_names = preprocessor.get_feature_names_out()
+    ranked_features = sorted(
+        zip(feature_names, point_model.feature_importances_, strict=True),
+        key=lambda pair: pair[1],
+        reverse=True,
+    )
+
+    metrics: dict[str, Any] = {
+        "data_source": "Ames Housing, Journal of Statistics Education",
+        "source_url": "https://jse.amstat.org/v19n3/decock/AmesHousing.txt",
+        "training_rows": int(len(train_data)),
+        "test_rows": int(len(test_data)),
+        "training_years": [
+            int(train_data["sale_year"].min()),
+            int(train_data["sale_year"].max()),
+        ],
+        "test_year": test_year,
+        "mae": float(mean_absolute_error(y_test, point_predictions)),
+        "rmse": float(np.sqrt(mean_squared_error(y_test, point_predictions))),
+        "r2": float(r2_score(y_test, point_predictions)),
+        "mape_pct": float(np.mean(np.abs((y_test - point_predictions) / y_test)) * 100),
+        "baseline_mae": float(mean_absolute_error(y_test, baseline_prediction)),
+        "interval_coverage_pct": float(
+            np.mean((y_test >= ordered_lower) & (y_test <= ordered_upper)) * 100
+        ),
+        "top_features": [
+            {
+                "feature": name.replace("numeric__", "").replace("categorical__", ""),
+                "importance": float(importance),
+            }
+            for name, importance in ranked_features[:8]
+        ],
+    }
+
+    bundle = ValuationModelBundle(
+        preprocessor=preprocessor,
+        point_model=point_model,
+        lower_model=lower_model,
+        upper_model=upper_model,
+        neighborhoods=sorted(data["neighborhood"].dropna().astype(str).unique()),
+        building_types=sorted(data["building_type"].dropna().astype(str).unique()),
+        kitchen_qualities=sorted(data["kitchen_quality"].dropna().astype(str).unique()),
+        training_years=(
+            int(train_data["sale_year"].min()),
+            int(train_data["sale_year"].max()),
+        ),
+        test_year=test_year,
+    )
+    return bundle, metrics
+
+
+def save_model(bundle: ValuationModelBundle, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(bundle, path, compress=3)
+
+
+def load_model(path: Path) -> ValuationModelBundle:
+    model = joblib.load(path)
+    if not isinstance(model, ValuationModelBundle):
+        raise TypeError(f"Unexpected model artifact type: {type(model)!r}")
+    return model
