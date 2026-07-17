@@ -1,0 +1,51 @@
+{
+  "data_source": "Ames Housing, Journal of Statistics Education",
+  "source_url": "https://jse.amstat.org/v19n3/decock/AmesHousing.txt",
+  "training_rows": 2589,
+  "test_rows": 341,
+  "training_years": [
+    2006,
+    2009
+  ],
+  "test_year": 2010,
+  "mae": 16022.365105602164,
+  "rmse": 23103.801576836333,
+  "r2": 0.9038833086585603,
+  "mape_pct": 11.04116806859654,
+  "baseline_mae": 52386.284457478,
+  "interval_coverage_pct": 73.31378299120234,
+  "top_features": [
+    {
+      "feature": "overall_quality",
+      "importance": 0.4697781327416021
+    },
+    {
+      "feature": "living_area_sqft",
+      "importance": 0.17554556702934848
+    },
+    {
+      "feature": "year_built",
+      "importance": 0.140306643290853
+    },
+    {
+      "feature": "basement_sqft",
+      "importance": 0.08158844723940337
+    },
+    {
+      "feature": "garage_capacity",
+      "importance": 0.06800220882046858
+    },
+    {
+      "feature": "overall_condition",
+      "importance": 0.01853474069937718
+    },
+    {
+      "feature": "kitchen_quality_TA",
+      "importance": 0.013425598723419677
+    },
+    {
+      "feature": "kitchen_quality_Ex",
+      "importance": 0.006994918991538727
+    }
+  ]
+}
