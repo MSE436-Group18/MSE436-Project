@@ -34,7 +34,3 @@ identifier so duplicate observations of one property cannot appear in both train
 - It does not contain rent, property condition, property type, vacancy, or financing variables.
 - Missing fields and geographic representation are uneven, and cleaning excludes luxury and
   unusual properties outside the documented ranges.
-- Kaggle labels the license as "Other" and the publisher describes the data as educational-use
-  material, so redistribution and any non-course use require a separate rights review.
-- Kaggle is a refreshable snapshot, not a guaranteed live feed. A deployed system should schedule
-  version checks/retraining and join current transaction, rent, vacancy, and interest-rate sources.
