@@ -86,8 +86,4 @@ Tests cover mortgage calculations, scenario sensitivity, recommendation changes,
 sensitivity, model output ordering, and property-feature sensitivity.
 
 ## Data source
-
-- Dean De Cock, *Ames, Iowa: Alternative to the Boston Housing Data as an End of Semester
-  Regression Project*, Journal of Statistics Education 19(3), 2011.
-- Original data: <https://jse.amstat.org/v19n3/decock/AmesHousing.txt>
-- Paper: <https://doi.org/10.1080/10691898.2011.11889627>
+<https://jse.amstat.org/v19n3/decock/AmesHousing.txt>
