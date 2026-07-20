@@ -440,7 +440,7 @@ with st.sidebar:
     st.title("Scenario controls")
     st.caption("Change any orange-labeled assumption and the investment decision recalculates.")
     st.selectbox(
-        "Demo preset",
+        "Investment Scenario",
         options=list(PRESETS),
         key="scenario_preset",
         on_change=on_preset_change,
