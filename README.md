@@ -2,7 +2,7 @@
 
 Brickwise is a human-in-the-loop decision support system for a small residential property investor deciding whether to **BUY**, **WATCH**, or **AVOID** a candidate listing.
 
-The interface is intentionally load-bearing: property facts change a trained valuation model,
+The interface is load bearing, property facts change a trained valuation model,
 while financing, operating, valuation, and risk controls change the investment recommendation.
 
 Repository: <https://github.com/MSE436-Group18/MSE436-Project>
@@ -29,10 +29,11 @@ streamlit run app.py
 ```
 
 The checked-in model artifact makes the demo runnable without a data download. To reproduce
-the training pipeline from the original source:
+the training pipeline from the cached source file—or refresh the public Kaggle snapshot first:
 
 ```bash
 python scripts/train_model.py
+python scripts/train_model.py --refresh-data
 ```
 
 ## What the system does
@@ -46,27 +47,31 @@ python scripts/train_model.py
 
 ## Model evidence
 
-The prototype uses the Ames Housing dataset: 2,930 residential sales from 2006-2010. The split
-is temporal rather than random so the evaluation better resembles scoring future listings.
+The prototype uses the Kaggle USA Real Estate Dataset, sourced from Realtor.com: 2,226,382
+records across U.S. states and ZIP codes. Cleaning retains plausible, complete for-sale residential
+listings; a fixed-seed reservoir sample makes training reproducible and practical on a laptop.
+The holdout is grouped by encoded property ID so the same property cannot leak across the split.
 
 | Measure | Result |
 | --- | ---: |
-| Training rows, 2006-2009 | 2,589 |
-| Holdout rows, 2010 | 341 |
-| Holdout MAE | $16,022 |
-| Holdout R-squared | 0.904 |
-| 80% interval coverage | 73.3% |
-| Median-price baseline MAE | $52,386 |
+| Source rows processed | 2,226,382 |
+| Rows passing cleaning rules | 880,541 |
+| Reproducible model sample | 300,000 |
+| Training / property-grouped holdout | 240,013 / 59,987 |
+| Holdout MAE | $140,717 |
+| Holdout R-squared | 0.714 |
+| 80% interval coverage | 80.0% |
+| Median-price baseline MAE | $297,520 |
 
-Gradient boosting fits this task because housing prices contain non-linear effects and feature
-interactions, but the model remains fast enough for live what-if analysis. Its main limitations
-are geographic scope, historical prices, and observational data.In a real-world scenario, the system would likely retrain on current local sales and join current rents, vacancy, and financing data to mitigate the risk of any macroeconomic bias present in the current dataset.
+Histogram gradient boosting fits this task because listing prices contain non-linear size and
+location effects, while remaining fast enough for live what-if analysis. Target encoding handles
+high-cardinality city and ZIP fields without a huge sparse matrix.
 
 ## Decision controls
 
-- Model inputs: quality, condition, living area, beds, baths, age, garage, basement,
-  neighborhood, building type, and kitchen quality.
-- Model settings: valuation basis and an explicit market-index multiplier.
+- Model inputs: state, city, ZIP code, living area, beds, baths, and lot size.
+- Model settings: valuation basis and an explicit market-index multiplier for source-snapshot
+  versus current/local conditions.
 - Scenario inputs: asking price, rent, mortgage rate, down payment, vacancy, rent growth,
   appreciation, maintenance, tax, insurance, and holding period.
 - Decision settings: minimum annual return and conservative, balanced, or growth risk policy.
@@ -86,4 +91,5 @@ Tests cover mortgage calculations, scenario sensitivity, recommendation changes,
 sensitivity, model output ordering, and property-feature sensitivity.
 
 ## Data source
-<https://jse.amstat.org/v19n3/decock/AmesHousing.txt>
+
+<https://www.kaggle.com/datasets/ahmedshahriarsakib/usa-real-estate-dataset>

@@ -8,63 +8,59 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.impute import SimpleImputer
+from sklearn.inspection import permutation_importance
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import TargetEncoder
 
 ValuationBasis = Literal["Conservative", "Expected", "Optimistic"]
 
 NUMERIC_FEATURES = [
-    "overall_quality",
-    "overall_condition",
     "living_area_sqft",
     "bedrooms",
-    "full_bathrooms",
-    "year_built",
-    "garage_capacity",
-    "basement_sqft",
+    "bathrooms",
+    "lot_size_acres",
 ]
 
 CATEGORICAL_FEATURES = [
-    "neighborhood",
-    "building_type",
-    "kitchen_quality",
+    "state",
+    "city",
+    "zip_code",
 ]
 
 MODEL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 SOURCE_COLUMN_MAP = {
-    "Overall Qual": "overall_quality",
-    "Overall Cond": "overall_condition",
-    "Gr Liv Area": "living_area_sqft",
-    "Bedroom AbvGr": "bedrooms",
-    "Full Bath": "full_bathrooms",
-    "Year Built": "year_built",
-    "Garage Cars": "garage_capacity",
-    "Total Bsmt SF": "basement_sqft",
-    "Neighborhood": "neighborhood",
-    "Bldg Type": "building_type",
-    "Kitchen Qual": "kitchen_quality",
-    "SalePrice": "sale_price",
-    "Yr Sold": "sale_year",
+    "status": "listing_status",
+    "price": "listing_price",
+    "bed": "bedrooms",
+    "bath": "bathrooms",
+    "acre_lot": "lot_size_acres",
+    "street": "property_id",
+    "city": "city",
+    "state": "state",
+    "zip_code": "zip_code",
+    "house_size": "living_area_sqft",
 }
+
+DATA_SOURCE_NAME = "USA Real Estate Dataset (Realtor.com listings via Kaggle)"
+DATA_SOURCE_URL = (
+    "https://www.kaggle.com/datasets/ahmedshahriarsakib/usa-real-estate-dataset"
+)
 
 
 @dataclass(frozen=True)
 class PropertyFeatures:
-    overall_quality: int
-    overall_condition: int
     living_area_sqft: int
     bedrooms: int
-    full_bathrooms: int
-    year_built: int
-    garage_capacity: float
-    basement_sqft: float
-    neighborhood: str
-    building_type: str
-    kitchen_quality: str
+    bathrooms: float
+    lot_size_acres: float
+    state: str
+    city: str
+    zip_code: str
 
     def to_frame(self) -> pd.DataFrame:
         return pd.DataFrame([asdict(self)], columns=MODEL_FEATURES)
@@ -97,14 +93,12 @@ class ValuationRange:
 @dataclass
 class ValuationModelBundle:
     preprocessor: Any
-    point_model: GradientBoostingRegressor
-    lower_model: GradientBoostingRegressor
-    upper_model: GradientBoostingRegressor
-    neighborhoods: list[str]
-    building_types: list[str]
-    kitchen_qualities: list[str]
-    training_years: tuple[int, int]
-    test_year: int
+    point_model: HistGradientBoostingRegressor
+    lower_model: HistGradientBoostingRegressor
+    upper_model: HistGradientBoostingRegressor
+    locations: dict[str, dict[str, list[str]]]
+    training_rows: int
+    test_rows: int
 
     def predict(self, features: PropertyFeatures) -> ValuationRange:
         transformed = self.preprocessor.transform(features.to_frame())
@@ -121,12 +115,42 @@ def prepare_training_data(raw_data: pd.DataFrame) -> pd.DataFrame:
     required_columns = list(SOURCE_COLUMN_MAP)
     missing = sorted(set(required_columns) - set(raw_data.columns))
     if missing:
-        raise ValueError(f"Ames dataset is missing required columns: {missing}")
+        raise ValueError(f"USA Real Estate dataset is missing required columns: {missing}")
 
     data = raw_data[required_columns].rename(columns=SOURCE_COLUMN_MAP).copy()
-    data = data.dropna(subset=["sale_price", "sale_year"])
-    data["sale_year"] = data["sale_year"].astype(int)
-    return data
+    numeric_columns = [
+        "listing_price",
+        "bedrooms",
+        "bathrooms",
+        "lot_size_acres",
+        "living_area_sqft",
+        "property_id",
+        "zip_code",
+    ]
+    for column in numeric_columns:
+        data[column] = pd.to_numeric(data[column], errors="coerce")
+
+    valid_rows = (
+        data["listing_status"].eq("for_sale")
+        & data["listing_price"].between(20_000, 5_000_000)
+        & data["bedrooms"].between(1, 10)
+        & data["bathrooms"].between(1, 10)
+        & data["living_area_sqft"].between(300, 10_000)
+        & (data["lot_size_acres"].isna() | data["lot_size_acres"].between(0, 20))
+        & data["state"].notna()
+        & data["city"].notna()
+        & data["zip_code"].notna()
+    )
+    data = data.loc[valid_rows].copy()
+    data["state"] = data["state"].astype(str).str.strip()
+    data["city"] = data["city"].astype(str).str.strip()
+    data["zip_code"] = data["zip_code"].round().astype("Int64").astype("string").str.zfill(5)
+    property_id = data["property_id"].round().astype("Int64").astype("string")
+    fallback_id = "row-" + data.index.astype(str)
+    property_id = property_id.fillna(pd.Series(fallback_id, index=data.index, dtype="string"))
+    data["property_key"] = data["state"] + "|" + data["zip_code"] + "|" + property_id
+    data = data.drop_duplicates(subset=["property_key", *MODEL_FEATURES, "listing_price"])
+    return data[[*MODEL_FEATURES, "listing_price", "property_key"]]
 
 
 def _make_preprocessor() -> ColumnTransformer:
@@ -136,7 +160,7 @@ def _make_preprocessor() -> ColumnTransformer:
             ("imputer", SimpleImputer(strategy="most_frequent")),
             (
                 "encoder",
-                OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+                TargetEncoder(target_type="continuous", random_state=436),
             ),
         ]
     )
@@ -145,42 +169,75 @@ def _make_preprocessor() -> ColumnTransformer:
             ("numeric", numeric_pipeline, NUMERIC_FEATURES),
             ("categorical", categorical_pipeline, CATEGORICAL_FEATURES),
         ],
-        verbose_feature_names_out=True,
+        verbose_feature_names_out=False,
     )
 
 
-def _make_regressor(loss: str, *, alpha: float = 0.9) -> GradientBoostingRegressor:
-    return GradientBoostingRegressor(
+def _make_regressor(
+    loss: Literal["squared_error", "quantile"],
+    *,
+    quantile: float | None = None,
+) -> HistGradientBoostingRegressor:
+    return HistGradientBoostingRegressor(
         loss=loss,
-        alpha=alpha,
-        n_estimators=300,
-        learning_rate=0.04,
-        max_depth=3,
-        min_samples_leaf=8,
+        quantile=quantile,
+        max_iter=250,
+        learning_rate=0.06,
+        max_leaf_nodes=31,
+        min_samples_leaf=30,
+        l2_regularization=1.0,
+        early_stopping=True,
+        validation_fraction=0.1,
+        n_iter_no_change=20,
         random_state=436,
     )
 
 
+def _build_location_options(data: pd.DataFrame) -> dict[str, dict[str, list[str]]]:
+    locations: dict[str, dict[str, list[str]]] = {}
+    rows = (
+        data[["state", "city", "zip_code"]]
+        .drop_duplicates()
+        .sort_values(CATEGORICAL_FEATURES)
+    )
+    for row in rows.itertuples(index=False):
+        state_locations = locations.setdefault(str(row.state), {})
+        city_zip_codes = state_locations.setdefault(str(row.city), [])
+        city_zip_codes.append(str(row.zip_code))
+    return locations
+
+
 def train_valuation_model(
     raw_data: pd.DataFrame,
+    *,
+    prepared: bool = False,
+    source_rows: int | None = None,
+    usable_source_rows: int | None = None,
 ) -> tuple[ValuationModelBundle, dict[str, Any]]:
-    data = prepare_training_data(raw_data)
-    test_year = int(data["sale_year"].max())
-    train_data = data[data["sale_year"] < test_year]
-    test_data = data[data["sale_year"] == test_year]
+    data = raw_data.copy() if prepared else prepare_training_data(raw_data)
+    del raw_data
+    if data.empty:
+        raise ValueError("No usable for-sale residential listings remained after cleaning.")
+
+    splitter = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=436)
+    train_indices, test_indices = next(
+        splitter.split(data[MODEL_FEATURES], groups=data["property_key"])
+    )
+    train_data = data.iloc[train_indices]
+    test_data = data.iloc[test_indices]
     if train_data.empty or test_data.empty:
-        raise ValueError("A time-based train/test split could not be created.")
+        raise ValueError("A property-grouped train/test split could not be created.")
 
     preprocessor = _make_preprocessor()
-    x_train = preprocessor.fit_transform(train_data[MODEL_FEATURES])
-    x_test = preprocessor.transform(test_data[MODEL_FEATURES])
-    y_train = train_data["sale_price"].to_numpy(dtype=float)
-    y_test = test_data["sale_price"].to_numpy(dtype=float)
+    y_train = train_data["listing_price"].to_numpy(dtype=float)
+    y_test = test_data["listing_price"].to_numpy(dtype=float)
     log_y_train = np.log1p(y_train)
+    x_train = preprocessor.fit_transform(train_data[MODEL_FEATURES], log_y_train)
+    x_test = preprocessor.transform(test_data[MODEL_FEATURES])
 
-    point_model = _make_regressor("huber")
-    lower_model = _make_regressor("quantile", alpha=0.10)
-    upper_model = _make_regressor("quantile", alpha=0.90)
+    point_model = _make_regressor("squared_error")
+    lower_model = _make_regressor("quantile", quantile=0.10)
+    upper_model = _make_regressor("quantile", quantile=0.90)
     point_model.fit(x_train, log_y_train)
     lower_model.fit(x_train, log_y_train)
     upper_model.fit(x_train, log_y_train)
@@ -192,23 +249,34 @@ def train_valuation_model(
     ordered_upper = np.maximum(upper_predictions, point_predictions)
 
     baseline_prediction = np.full_like(y_test, np.median(y_train))
-    feature_names = preprocessor.get_feature_names_out()
+    importance_size = min(10_000, len(test_data))
+    importance_rng = np.random.default_rng(436)
+    importance_indices = importance_rng.choice(len(test_data), size=importance_size, replace=False)
+    importance = permutation_importance(
+        point_model,
+        x_test[importance_indices],
+        np.log1p(y_test[importance_indices]),
+        n_repeats=3,
+        random_state=436,
+        scoring="neg_mean_absolute_error",
+    )
     ranked_features = sorted(
-        zip(feature_names, point_model.feature_importances_, strict=True),
+        zip(MODEL_FEATURES, importance.importances_mean, strict=True),
         key=lambda pair: pair[1],
         reverse=True,
     )
 
     metrics: dict[str, Any] = {
-        "data_source": "Ames Housing, Journal of Statistics Education",
-        "source_url": "https://jse.amstat.org/v19n3/decock/AmesHousing.txt",
+        "data_source": DATA_SOURCE_NAME,
+        "source_url": DATA_SOURCE_URL,
+        "source_rows": int(source_rows if source_rows is not None else len(data)),
+        "usable_source_rows": int(
+            usable_source_rows if usable_source_rows is not None else len(data)
+        ),
+        "model_sample_rows": int(len(data)),
         "training_rows": int(len(train_data)),
         "test_rows": int(len(test_data)),
-        "training_years": [
-            int(train_data["sale_year"].min()),
-            int(train_data["sale_year"].max()),
-        ],
-        "test_year": test_year,
+        "split_strategy": "Property-grouped random 80/20 holdout",
         "mae": float(mean_absolute_error(y_test, point_predictions)),
         "rmse": float(np.sqrt(mean_squared_error(y_test, point_predictions))),
         "r2": float(r2_score(y_test, point_predictions)),
@@ -218,11 +286,8 @@ def train_valuation_model(
             np.mean((y_test >= ordered_lower) & (y_test <= ordered_upper)) * 100
         ),
         "top_features": [
-            {
-                "feature": name.replace("numeric__", "").replace("categorical__", ""),
-                "importance": float(importance),
-            }
-            for name, importance in ranked_features[:8]
+            {"feature": name, "importance": float(feature_importance)}
+            for name, feature_importance in ranked_features
         ],
     }
 
@@ -231,14 +296,9 @@ def train_valuation_model(
         point_model=point_model,
         lower_model=lower_model,
         upper_model=upper_model,
-        neighborhoods=sorted(data["neighborhood"].dropna().astype(str).unique()),
-        building_types=sorted(data["building_type"].dropna().astype(str).unique()),
-        kitchen_qualities=sorted(data["kitchen_quality"].dropna().astype(str).unique()),
-        training_years=(
-            int(train_data["sale_year"].min()),
-            int(train_data["sale_year"].max()),
-        ),
-        test_year=test_year,
+        locations=_build_location_options(data),
+        training_rows=len(train_data),
+        test_rows=len(test_data),
     )
     return bundle, metrics
 

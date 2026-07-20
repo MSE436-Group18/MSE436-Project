@@ -16,20 +16,16 @@ METRICS_PATH = ROOT / "artifacts" / "model_metrics.json"
 
 PRESETS: dict[str, dict[str, Any]] = {
     "Value Play": {
-        "overall_quality": 7,
-        "overall_condition": 6,
-        "living_area_sqft": 1850,
+        "living_area_sqft": 2165,
         "bedrooms": 3,
-        "full_bathrooms": 2,
-        "year_built": 2003,
-        "garage_capacity": 2.0,
-        "basement_sqft": 980.0,
-        "neighborhood": "Somerst",
-        "building_type": "1Fam",
-        "kitchen_quality": "Gd",
-        "asking_price": 345000.0,
+        "bathrooms": 3.0,
+        "lot_size_acres": 0.15,
+        "state": "Texas",
+        "city": "Houston",
+        "zip_code": "77002",
+        "asking_price": 319000.0,
         "monthly_rent": 3100.0,
-        "market_multiplier": 1.60,
+        "market_multiplier": 1.0,
         "valuation_basis": "Expected",
         "risk_profile": "Balanced",
         "down_payment_pct": 25.0,
@@ -44,20 +40,16 @@ PRESETS: dict[str, dict[str, Any]] = {
         "holding_period_years": 7,
     },
     "Rate Shock": {
-        "overall_quality": 7,
-        "overall_condition": 6,
-        "living_area_sqft": 1850,
+        "living_area_sqft": 2165,
         "bedrooms": 3,
-        "full_bathrooms": 2,
-        "year_built": 2003,
-        "garage_capacity": 2.0,
-        "basement_sqft": 980.0,
-        "neighborhood": "Somerst",
-        "building_type": "1Fam",
-        "kitchen_quality": "Gd",
+        "bathrooms": 3.0,
+        "lot_size_acres": 0.15,
+        "state": "Texas",
+        "city": "Houston",
+        "zip_code": "77002",
         "asking_price": 395000.0,
-        "monthly_rent": 2850.0,
-        "market_multiplier": 1.60,
+        "monthly_rent": 2650.0,
+        "market_multiplier": 1.0,
         "valuation_basis": "Conservative",
         "risk_profile": "Conservative",
         "down_payment_pct": 20.0,
@@ -72,20 +64,16 @@ PRESETS: dict[str, dict[str, Any]] = {
         "holding_period_years": 7,
     },
     "Premium Listing": {
-        "overall_quality": 5,
-        "overall_condition": 5,
-        "living_area_sqft": 1260,
-        "bedrooms": 3,
-        "full_bathrooms": 1,
-        "year_built": 1948,
-        "garage_capacity": 1.0,
-        "basement_sqft": 620.0,
-        "neighborhood": "OldTown",
-        "building_type": "1Fam",
-        "kitchen_quality": "TA",
-        "asking_price": 275000.0,
-        "monthly_rent": 1750.0,
-        "market_multiplier": 1.60,
+        "living_area_sqft": 1200,
+        "bedrooms": 2,
+        "bathrooms": 2.0,
+        "lot_size_acres": 0.05,
+        "state": "Florida",
+        "city": "Miami",
+        "zip_code": "33131",
+        "asking_price": 750000.0,
+        "monthly_rent": 4000.0,
+        "market_multiplier": 1.0,
         "valuation_basis": "Expected",
         "risk_profile": "Balanced",
         "down_payment_pct": 20.0,
@@ -126,6 +114,22 @@ def initialize_state() -> None:
     st.session_state["scenario_preset"] = requested_preset
     apply_preset(requested_preset)
     st.session_state["dss_initialized"] = True
+
+
+def ensure_location_state(model: ValuationModelBundle) -> None:
+    states = list(model.locations)
+    if not states:
+        raise ValueError("The model artifact contains no supported locations.")
+    if st.session_state.get("state") not in model.locations:
+        st.session_state["state"] = states[0]
+
+    cities = list(model.locations[st.session_state["state"]])
+    if st.session_state.get("city") not in cities:
+        st.session_state["city"] = cities[0]
+
+    zip_codes = model.locations[st.session_state["state"]][st.session_state["city"]]
+    if st.session_state.get("zip_code") not in zip_codes:
+        st.session_state["zip_code"] = zip_codes[0]
 
 
 def on_preset_change() -> None:
@@ -435,6 +439,7 @@ if not MODEL_PATH.exists() or not METRICS_PATH.exists():
 model = get_model()
 metrics = get_metrics()
 initialize_state()
+ensure_location_state(model)
 
 with st.sidebar:
     st.title("Scenario controls")
@@ -502,24 +507,27 @@ with st.sidebar:
     )
 
     with st.expander("Property facts used by the model"):
-        st.slider("Overall quality", 1, 10, key="overall_quality")
-        st.slider("Overall condition", 1, 10, key="overall_condition")
-        st.number_input("Living area (sq ft)", 400, 6000, step=50, key="living_area_sqft")
-        st.number_input("Bedrooms", 0, 8, step=1, key="bedrooms")
-        st.number_input("Full bathrooms", 0, 6, step=1, key="full_bathrooms")
-        st.number_input("Year built", 1870, 2026, step=1, key="year_built")
-        st.number_input("Garage capacity", 0.0, 5.0, step=1.0, key="garage_capacity")
-        st.number_input("Basement area (sq ft)", 0.0, 4000.0, step=50.0, key="basement_sqft")
-        st.selectbox("Neighborhood", model.neighborhoods, key="neighborhood")
-        st.selectbox("Building type", model.building_types, key="building_type")
-        st.selectbox("Kitchen quality", model.kitchen_qualities, key="kitchen_quality")
+        st.number_input("Living area (sq ft)", 300, 10000, step=50, key="living_area_sqft")
+        st.number_input("Bedrooms", 1, 10, step=1, key="bedrooms")
+        st.number_input("Bathrooms", 1.0, 10.0, step=0.5, key="bathrooms")
+        st.number_input("Lot size (acres)", 0.0, 20.0, step=0.05, key="lot_size_acres")
+        st.selectbox("State", list(model.locations), key="state")
+        st.selectbox("City", list(model.locations[st.session_state["state"]]), key="city")
+        st.selectbox(
+            "ZIP code",
+            model.locations[st.session_state["state"]][st.session_state["city"]],
+            key="zip_code",
+        )
         st.slider(
             "Market index multiplier",
-            0.5,
-            3.0,
+            0.75,
+            1.5,
             step=0.05,
             key="market_multiplier",
-            help="Updates historical Ames-dollar model output to the user's market index.",
+            help=(
+                "Adjusts the source-snapshot price benchmark for newer or local market "
+                "conditions; 1.0 uses the model estimate unchanged."
+            ),
         )
 
     with st.expander("Financing and operating assumptions"):
@@ -543,17 +551,13 @@ with st.sidebar:
         st.slider("Holding period (years)", 2, 15, step=1, key="holding_period_years")
 
 property_features = PropertyFeatures(
-    overall_quality=st.session_state["overall_quality"],
-    overall_condition=st.session_state["overall_condition"],
     living_area_sqft=st.session_state["living_area_sqft"],
     bedrooms=st.session_state["bedrooms"],
-    full_bathrooms=st.session_state["full_bathrooms"],
-    year_built=st.session_state["year_built"],
-    garage_capacity=st.session_state["garage_capacity"],
-    basement_sqft=st.session_state["basement_sqft"],
-    neighborhood=st.session_state["neighborhood"],
-    building_type=st.session_state["building_type"],
-    kitchen_quality=st.session_state["kitchen_quality"],
+    bathrooms=st.session_state["bathrooms"],
+    lot_size_acres=st.session_state["lot_size_acres"],
+    state=st.session_state["state"],
+    city=st.session_state["city"],
+    zip_code=st.session_state["zip_code"],
 )
 assumptions = InvestmentAssumptions(
     asking_price=st.session_state["asking_price"],
@@ -611,7 +615,7 @@ st.markdown(
     f"""
     <div class="metric-grid">
       <div class="metric-card">
-        <div class="metric-label">Selected fair value</div>
+        <div class="metric-label">Selected price benchmark</div>
         <div class="metric-value">{money(decision.selected_fair_value)}</div>
         <div class="metric-note">{st.session_state["valuation_basis"]} model basis</div>
       </div>
@@ -711,22 +715,27 @@ st.plotly_chart(
 with st.expander("Model evidence and limitations"):
     st.markdown(
         f"""
-        - **Task:** supervised regression of residential sale price, with lower and upper
-          quantile models providing an 80% valuation range.
-        - **Temporal validation:** {metrics["training_rows"]:,} sales from
-          {metrics["training_years"][0]}-{metrics["training_years"][1]} trained the model;
-          {metrics["test_rows"]:,} sales from {metrics["test_year"]} were held out.
+        - **Task:** supervised regression of a U.S. for-sale listing's advertised price, with
+          lower and upper quantile models providing an 80% benchmark range.
+        - **Data:** {metrics["source_rows"]:,} nationwide listing records were processed;
+          {metrics["usable_source_rows"]:,} passed the documented residential cleaning rules,
+          and a reproducible {metrics["model_sample_rows"]:,}-row sample was modelled.
+        - **Validation:** {metrics["training_rows"]:,} listings trained the model and
+          {metrics["test_rows"]:,} listings were held out by encoded property, preventing the
+          same property from appearing on both sides of the split.
         - **Holdout performance:** MAE {money(metrics["mae"])}, R-squared
           {metrics["r2"]:.3f}, and {metrics["interval_coverage_pct"]:.1f}% interval coverage.
-        - **Why this model:** gradient-boosted trees capture non-linear price effects and
-          interactions while remaining fast enough for live what-if analysis.
-        - **Limits:** Ames is one U.S. city and the sales are historical. The market-index
-          multiplier is explicit, but a deployed system must retrain on current local sales,
-          rents, vacancy, and interest-rate data before any real investment decision.
+        - **Why this model:** histogram gradient-boosted trees capture non-linear size and
+          location effects while remaining fast enough for live what-if analysis.
+        - **Limits:** the target is an advertised or recently sold price, not a verified closing
+          price or future appreciation; the file lacks a listing timestamp, rent, condition, and
+          property type; missing values and geographic coverage are uneven. The market-index
+          multiplier is explicit, and the retraining script can refresh the Kaggle snapshot, but
+          a deployed system still needs current transaction, rent, vacancy, and rate feeds.
         """
     )
 
 st.caption(
     "Course prototype only. Outputs are scenario estimates, not financial advice. "
-    "Ames Housing source: De Cock (2011), Journal of Statistics Education."
+    "Listing source: USA Real Estate Dataset on Kaggle, collected from Realtor.com."
 )

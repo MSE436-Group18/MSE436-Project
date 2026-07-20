@@ -2,6 +2,10 @@
 addopts = "-q"
 pythonpath = ["."]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:Setting the shape on a NumPy array has been deprecated:DeprecationWarning:joblib.numpy_pickle",
+    "ignore:Could not find the number of physical cores:UserWarning:joblib.externals.loky.backend.context",
+]
 
 [tool.ruff]
 line-length = 100

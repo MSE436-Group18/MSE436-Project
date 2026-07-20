@@ -1,51 +1,46 @@
 {
-  "data_source": "Ames Housing, Journal of Statistics Education",
-  "source_url": "https://jse.amstat.org/v19n3/decock/AmesHousing.txt",
-  "training_rows": 2589,
-  "test_rows": 341,
-  "training_years": [
-    2006,
-    2009
-  ],
-  "test_year": 2010,
-  "mae": 16022.365105602164,
-  "rmse": 23103.801576836333,
-  "r2": 0.9038833086585603,
-  "mape_pct": 11.04116806859654,
-  "baseline_mae": 52386.284457478,
-  "interval_coverage_pct": 73.31378299120234,
+  "data_source": "USA Real Estate Dataset (Realtor.com listings via Kaggle)",
+  "source_url": "https://www.kaggle.com/datasets/ahmedshahriarsakib/usa-real-estate-dataset",
+  "source_rows": 2226382,
+  "usable_source_rows": 880541,
+  "model_sample_rows": 300000,
+  "training_rows": 240013,
+  "test_rows": 59987,
+  "split_strategy": "Property-grouped random 80/20 holdout",
+  "mae": 140717.27951717642,
+  "rmse": 295317.50345328264,
+  "r2": 0.7144560405795644,
+  "mape_pct": 30.130983912284094,
+  "baseline_mae": 297519.5821437978,
+  "interval_coverage_pct": 80.0140030339907,
   "top_features": [
     {
-      "feature": "overall_quality",
-      "importance": 0.4697781327416021
+      "feature": "zip_code",
+      "importance": 0.20758073804350485
     },
     {
       "feature": "living_area_sqft",
-      "importance": 0.17554556702934848
+      "importance": 0.13650386373392484
     },
     {
-      "feature": "year_built",
-      "importance": 0.140306643290853
+      "feature": "state",
+      "importance": 0.0590897425376841
     },
     {
-      "feature": "basement_sqft",
-      "importance": 0.08158844723940337
+      "feature": "bathrooms",
+      "importance": 0.05559403339593607
     },
     {
-      "feature": "garage_capacity",
-      "importance": 0.06800220882046858
+      "feature": "city",
+      "importance": 0.02328651642583555
     },
     {
-      "feature": "overall_condition",
-      "importance": 0.01853474069937718
+      "feature": "lot_size_acres",
+      "importance": 0.018430541279033447
     },
     {
-      "feature": "kitchen_quality_TA",
-      "importance": 0.013425598723419677
-    },
-    {
-      "feature": "kitchen_quality_Ex",
-      "importance": 0.006994918991538727
+      "feature": "bedrooms",
+      "importance": 0.006663690143811241
     }
   ]
 }
