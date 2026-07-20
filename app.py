@@ -281,7 +281,7 @@ def equity_chart(years: list[int], equity: list[float], cash_flow: list[float]) 
 
 
 st.set_page_config(
-    page_title="Brickwise Property Decision Lab",
+    page_title="Property Investment Decision Support",
     page_icon="BW",
     layout="wide",
     initial_sidebar_state="auto",
@@ -589,7 +589,7 @@ decision = evaluate_investment(
 st.markdown(
     """
     <div class="hero-kicker">Human-in-the-loop investment DSS</div>
-    <h1 class="hero-title">Brickwise Property<br>Decision Lab</h1>
+    <h1 class="hero-title">Property Investment<br>Decision Support</h1>
     <p class="hero-subtitle">
       A trained valuation model estimates a defensible price range. Your financing,
       operating, and risk assumptions then determine whether this property clears the
